@@ -1,0 +1,13 @@
+{
+  "name": "jinyong-heroes",
+  "version": "1.0.0",
+  "description": "金庸群俠傳 — 開放式武俠角色扮演，方格戰棋戰鬥",
+  "type": "module",
+  "scripts": {
+    "verify": "node tools/verify.mjs",
+    "verify:quick": "node tools/verify.mjs --seeds=4",
+    "serve": "python3 -m http.server 8123",
+    "smoke": "node tools/uismoke.mjs"
+  },
+  "license": "MIT"
+}
