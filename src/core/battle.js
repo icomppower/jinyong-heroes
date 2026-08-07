@@ -90,7 +90,7 @@ export function advance(b) {
       ready.sort((a, c) => c.ap - a.ap || derived(c.char).qinggong - derived(a.char).qinggong || a.uid - c.uid);
       const u = ready[0];
       u.ap -= TUNING.apThreshold;
-      u.moved = false; u.acted = false;
+      u.moved = false; u.acted = false; u.extraUsed = false;
       b.active = u;
       startTurn(b, u);
       if (u.down) { b.active = null; if (checkOver(b)) return null; continue; }
@@ -350,8 +350,9 @@ export function useSkill(b, u, skId, tx, ty) {
   }
   u.skillUse[skId] = (u.skillUse[skId] || 0) + 1;
 
-  // 快招：有機率立刻再動一次
-  if (sk.extraTurn && b.rng.chance(sk.extraTurn) && !u.down) {
+  // 快招：有機率立刻再動一次，但一回合最多追加一次，免得一面倒連打
+  if (sk.extraTurn && !u.extraUsed && b.rng.chance(sk.extraTurn) && !u.down) {
+    u.extraUsed = true;
     u.acted = false; u.moved = false;
     log(b, `　招式如電，${u.char.name} 再進一招！`);
     events.push({ type: 'extra' });
