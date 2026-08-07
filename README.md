@@ -4,10 +4,13 @@
 
 零依賴的純 ES 模組，開 `index.html` 就能玩（需經 http 伺服器載入模組）。
 
+線上版：**https://icomppower.github.io/jinyong-heroes/**
+
 ```bash
 npm run serve     # http://localhost:8123
 npm run verify    # 數值驗證：資料完整性、戰鬥平衡、主線可通關
 npm run smoke     # 無頭瀏覽器實際點按介面（需 macOS 上的 Chrome）
+npm run smoke https://icomppower.github.io/jinyong-heroes/   # 也可直接測線上版
 ```
 
 ## 玩法

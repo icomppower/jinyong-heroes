@@ -1,5 +1,6 @@
 // 以無頭 Chrome 載入 index.html?autotest=1，跑真實介面操作，讀回數值斷言。
-// 用法：node tools/uismoke.mjs
+// 用法：node tools/uismoke.mjs            （起本機伺服器測本地檔案）
+//       node tools/uismoke.mjs <網址>      （直接測已部署的線上版）
 
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -8,28 +9,33 @@ import { join } from 'node:path';
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 8137 + (process.pid % 200);
+const remote = process.argv[2];
 
-const server = spawn('python3', ['-m', 'http.server', String(PORT)], {
+const server = remote ? null : spawn('python3', ['-m', 'http.server', String(PORT)], {
   cwd: new URL('..', import.meta.url).pathname,
   stdio: 'ignore',
 });
 
 const profile = mkdtempSync(join(tmpdir(), 'jy-smoke-'));
 const cleanup = () => {
-  server.kill();                      // 只關掉自己開的這支
+  server?.kill();                     // 只關掉自己開的這支
   try { rmSync(profile, { recursive: true, force: true }); } catch {}
 };
 process.on('exit', cleanup);
 
-await new Promise(r => setTimeout(r, 700));
+const base = remote
+  ? remote.replace(/\/$/, '') + '/index.html'
+  : `http://127.0.0.1:${PORT}/index.html`;
+
+await new Promise(r => setTimeout(r, remote ? 0 : 700));
 
 const res = spawnSync(CHROME, [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   `--user-data-dir=${profile}`,
-  '--virtual-time-budget=40000',
+  '--virtual-time-budget=90000',
   '--window-size=1280,860',
   '--dump-dom',
-  `http://127.0.0.1:${PORT}/index.html?autotest=1`,
+  `${base}?autotest=1`,
 ], { encoding: 'utf8', timeout: 120000, maxBuffer: 32 * 1024 * 1024 });
 
 const dom = res.stdout || '';
