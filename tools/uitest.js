@@ -27,6 +27,30 @@ async function click(sel, ms = 4000) {
   return el;
 }
 
+// 真手指點得到嗎？element.click() 會直接派給節點，無視被別的東西蓋住，
+// 所以另外用 elementFromPoint 檢查該元素是不是自己中心點上最上層的東西。
+function hittable(el) {
+  if (!el) return { ok: false, why: '元素不存在' };
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return { ok: false, why: '尺寸為零' };
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return { ok: false, why: '在畫面外' };
+  const top = document.elementFromPoint(cx, cy);
+  if (!top) return { ok: false, why: '該點沒有元素' };
+  if (el === top || el.contains(top) || top.contains(el)) return { ok: true };
+  const d = top.id ? '#' + top.id : top.className ? '.' + String(top.className).split(' ')[0] : top.tagName;
+  return { ok: false, why: `被 ${d} 蓋住` };
+}
+
+// 等元素出現後，先斷言真的點得到，再點
+async function tapChecked(sel, label, ms = 4000) {
+  const el = await waitFor(sel, ms);
+  const h = hittable(el);
+  t(`${label}真的按得到（沒被蓋住）`, h.ok, h.why || '');
+  if (el) { el.click(); await sleep(40); }
+  return el;
+}
+
 // 對話框中的主要按鈕（繼續／確定）
 async function clickPrimary(ms = 3000) {
   const el = await waitFor('#modal.on .foot .btn.primary', ms);
@@ -74,12 +98,14 @@ async function scenario() {
   const { G } = api;
   try { localStorage.clear(); } catch {}
 
-  // ── 開新遊戲 ──
-  await click('[data-new]');
+  // ── 開新遊戲（開場這條路徑逐步檢查點得到與否，被蓋住就等於卡在標題進不去）──
+  await tapChecked('[data-new]', '標題的「新的江湖」');
   await waitFor('#modal.on #nm');
+  t('取名對話框浮在標題之上', hittable(document.getElementById('nm')).ok,
+    hittable(document.getElementById('nm')).why || '');
   document.getElementById('nm').value = '測試';
-  await clickPrimary();                       // 入江湖
-  await clickPrimary();                       // 開場白
+  await tapChecked('#modal.on .foot .btn.primary', '取名框的「入江湖」');
+  await tapChecked('#modal.on .foot .btn.primary', '開場白的「繼續」');
   await sleep(120);
 
   const g = api.S.g;
