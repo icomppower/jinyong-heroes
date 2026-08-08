@@ -1,7 +1,7 @@
 // 主控：標題、場景行走、與 NPC 互動、各式面板，以及戰鬥銜接。
 
 import * as G from '../core/game.js';
-import { LOC_BY_ID } from '../data/world.js';
+import { LOC_BY_ID } from '../data/world/locations.js';
 import { ITEM_BY_ID, QUEST_BOOKS } from '../data/items.js';
 import { SKILL_BY_ID, KIND_NAME } from '../data/skills.js';
 import { ALLY_BY_ID } from '../data/chars.js';
@@ -72,10 +72,10 @@ function askName() {
       font-family:inherit;font-size:17px;border:1px solid var(--line);background:var(--paper2)">`,
     [{ t: '取消' }, {
       t: '入江湖', primary: true, fn: vals => {
-        S.g = G.newGame((vals.nm || '無名').trim().slice(0, 6) || '無名');
+        S.g = applyDebugParams(G.newGame((vals.nm || '無名').trim().slice(0, 6) || '無名'));
         S.slot = 1;
         renderField();
-        say('你在揚州城外的官道上醒來。<br><br>頭很痛，記不清自己是怎麼到這裡的。<br>身上只有幾十文錢，和一把不知哪來的木刀。<br><br>北邊不遠處就是揚州城門。<br><br><span class="small muted">用方向鍵或 WASD 走動，也可以直接點地圖上想去的地方。<br>走上去撞到人，就是跟他說話。</span>');
+        say('你在揚州城外的官道上醒來。<br><br>頭很痛，記不清自己是怎麼到這裡的。<br>身上只有幾十文錢，和一把不知哪來的木刀。<br><br>順著官道往北走十幾步，就是揚州城門。<br><br><span class="small muted">方向鍵或 WASD 走動，也可以直接點地圖上想去的地方。<br>走上去撞到人就是跟他說話；推開有「門」字的門扉可以進屋。<br>沿官道走省力又快，跨野而行既慢又累；天黑之後路上不太平。</span>');
       }
     }]);
   setTimeout(() => document.getElementById('nm')?.select(), 30);
@@ -103,11 +103,19 @@ function renderField() {
   S.battle = null;
   R = shell();
   S.sui = new SceneUI(R.stage, S.g, {
+    lockView: camParam ? +camParam : null,
     onInteract: e => handleInteract(e),
     onEncounter: mobs => say('前方閃出人影，攔住去路！', () => startBattle(G.startEncounter(S.g, mobs), false)),
     onSceneChange: () => { paintAll(); autosave(); },
     onChanged: () => paintHud(),
     onMessage: m => toast(m),
+    onArrive: id => { paintAll(); autosave(); },
+    onActor: e => {
+      const act = G.interact(S.g, e);
+      if (act?.kind === 'shop') { S.sui.queue.length = 0; shopDialog(act.stock, act.title, act.greet); }
+      else if (act) toast(`${act.title}　${act.text}`);
+    },
+    onFerry: f => ferryDialog(f),
     onBook: id => {
       paintAll(); autosave();
       const bk = ITEM_BY_ID[id];
@@ -124,11 +132,14 @@ function paintAll() { paintHud(); paintSide(); paintActions(); paintLog(); S.sui
 
 function paintHud() {
   const g = S.g;
-  const where = g.scene === 'overworld' ? '江湖道上' : LOC_BY_ID[g.scene].name;
+  const sc = G.curScene(g);
+  const loc = G.here(g);
+  const where = sc.kind === 'interior' ? sc.name : (loc ? loc.name : '江湖道上');
   R.hud.innerHTML = `
     <b>${esc(g.party[0].name)}</b>
     <span>${where}</span>
     <span>第 <b>${g.day}</b> 天</span>
+    <span${G.isNight(g) ? ' style="color:var(--mp)"' : ''}>${G.timeLabel(g)}</span>
     <span>銀兩 <b>${g.gold}</b></span>
     <span>聲望 <b>${g.fame}</b></span>
     <span>道德 <b>${g.morality}</b></span>
@@ -151,9 +162,12 @@ function paintLog() {
 function paintSide() {
   const g = S.g;
   const loc = G.here(g);
+  const sc = G.curScene(g);
+  const h = sc.kind === 'interior' ? 0 : G.heightAt(sc, g.pos.x, g.pos.y);
   R.side.innerHTML = `
     <div class="loc-name">${loc ? loc.name : '江湖'}</div>
-    <div class="loc-desc">${loc ? loc.desc : '官道縱橫，四方皆可去得。走到城鎮或山門前，踏進去便是。'}</div>
+    <div class="loc-desc">${loc ? loc.desc : '官道縱橫，四方皆可去得。沿著官道走省力，跨野而行既慢又累。'}</div>
+    ${sc.kind === 'interior' ? '' : `<div class="tiny muted">海拔 ${h}　${h > 150 ? '山高風急，望得極遠' : h > 80 ? '地勢略高' : '平地'}</div>`}
     <hr>
     <div class="small muted" style="letter-spacing:.2em">隊伍（${g.party.length}/${G.PARTY_MAX}）</div>
     ${g.party.map((c, i) => {
@@ -178,6 +192,7 @@ function paintActions() {
       <button class="btn dp" data-d="right">→</button>
     </div>
     <span class="sp"></span>
+    <button class="btn" data-w="camp">露宿</button>
     <button class="btn" data-w="bag">行囊</button>
     <button class="btn" data-w="party">隊伍</button>
   </div>`;
@@ -187,6 +202,7 @@ function paintActions() {
     b.onpointerdown = ev => { ev.preventDefault(); last = Date.now(); go(); };
     b.onclick = () => { if (Date.now() - last > 400) go(); };   // 合成 click 也要能走
   });
+  R.actions.querySelector('[data-w="camp"]').onclick = campDialog;
   R.actions.querySelector('[data-w="bag"]').onclick = bagDialog;
   R.actions.querySelector('[data-w="party"]').onclick = () => charSheet(0);
 }
@@ -197,7 +213,7 @@ function handleInteract(e) {
   if (!act) return;
   switch (act.kind) {
     case 'text': modal(act.title, `<div class="narr">${act.text}</div>`); break;
-    case 'shop': shopDialog(); break;
+    case 'shop': shopDialog(act.stock, act.title, act.greet); break;
     case 'inn': innDialog(); break;
     case 'train': trainDialog(); break;
     case 'recruit': recruitDialog(act.who); break;
@@ -205,8 +221,34 @@ function handleInteract(e) {
   }
 }
 
+function ferryDialog(f) {
+  modal(f.name, `<div class="narr">渡口泊著一條船。「往${esc(f.toName)}麼？船資 ${f.fare} 兩，半日腳程。」</div>`,
+    [{ t: '不渡了' }, {
+      t: `上船（${f.fare} 兩）`, primary: true, fn: () => {
+        const r = G.ride(S.g, f);
+        if (!r.ok) return toast(r.why);
+        paintAll(); autosave();
+        say(`船在浪裡搖了半日。<br><br>靠岸時已是${G.timeLabel(S.g)}。`);
+      }
+    }]);
+}
+
+function campDialog() {
+  const g = S.g;
+  if (G.curScene(g).kind === 'interior') return toast('屋裡不必露宿。');
+  modal('露宿', `<div class="narr">尋個背風處生堆火，捱到天亮。</div>
+    <div class="small muted">現在是${G.timeLabel(g)}。露宿回復體力，但荒郊野外並不安穩。</div>`,
+    [{ t: '再走走' }, {
+      t: '就地生火', primary: true, fn: () => {
+        G.camp(g); paintAll(); autosave();
+        say(`火堆燒了一夜。<br><br>天亮了，${G.timeLabel(g)}，體力回到 ${g.stamina}。`);
+      }
+    }]);
+}
+
 function innDialog() {
   const loc = G.here(S.g);
+  if (!G.innOpen(S.g)) return modal('客棧', '<div class="narr">「打烊了，客官明日請早。」<br><br>門板上了一半，店小二頭也不抬。</div>');
   modal('客棧', `<div class="narr">「客官，住店還是打尖？一晚 ${loc.inn} 兩。」</div>
     <div class="small muted">住一晚可回復全隊氣血、內力與體力。</div>`,
     [{ t: '不了' }, {
@@ -444,9 +486,9 @@ function charSheet(idx, tab = 'stat') {
 }
 
 // ═══ 商店・行囊 ═══
-function shopDialog() {
-  const g = S.g, loc = G.here(g);
-  const buyRows = loc.shop.map(id => {
+function shopDialog(stock, title = '商鋪', greet = '') {
+  const g = S.g;
+  const buyRows = stock.map(id => {
     const it = ITEM_BY_ID[id];
     return `<button class="item" data-buy="${id}" ${g.gold < it.price ? 'disabled' : ''}>
       <div class="t"><b>${it.name}</b><div class="d">${it.desc}</div></div>
@@ -456,18 +498,18 @@ function shopDialog() {
     .map(x => `<button class="item" data-sell="${x.id}">
       <div class="t"><b>${x.item.name}</b> ×${x.n}</div>
       <div class="d">售 ${Math.round(x.item.price * 0.4)} 兩</div></button>`).join('');
-  const body = modal(`商鋪　<span class="tiny muted">身上 ${g.gold} 兩</span>`,
-    `<div class="small muted">買</div><div class="list">${buyRows}</div>
+  const body = modal(`${esc(title)}　<span class="tiny muted">身上 ${g.gold} 兩</span>`,
+    `${greet ? `<div class="narr">${greet}</div>` : ''}<div class="small muted">買</div><div class="list">${buyRows}</div>
      <hr><div class="small muted">賣</div><div class="list">${sellRows || '<div class="tiny muted">沒有可賣之物。</div>'}</div>`);
   body.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => {
     const r = G.buy(g, b.dataset.buy);
     if (!r.ok) return toast(r.why);
-    paintHud(); closeModal(); shopDialog();
+    paintHud(); closeModal(); shopDialog(stock, title);
   });
   body.querySelectorAll('[data-sell]').forEach(b => b.onclick = () => {
     const r = G.sell(g, b.dataset.sell);
     if (!r.ok) return toast(r.why || '賣不得。');
-    paintHud(); closeModal(); shopDialog();
+    paintHud(); closeModal(); shopDialog(stock, title);
   });
 }
 
@@ -488,6 +530,33 @@ function bagDialog() {
     });
   });
 }
+
+// ═══ 除錯參數 ═══
+// ?pos=x,y[,facing] 直接落地　?cam=n 鎖視野格寬　?time=HH 設時辰
+// ?books=N 先給 N 部秘笈　?at=地點id 站到那裡　?gold=N
+// SF Sunset Drive 拿這些做截圖驗證；這裡是給 uismoke 用的——
+// 「得先走到第五關才測得到」壓成一次跳轉。
+function applyDebugParams(g) {
+  const q = new URLSearchParams(location.search);
+  if (q.has('at')) {
+    const p = G.locPos(q.get('at'));
+    if (p) { g.scene = 'world'; g.pos = { ...p }; }
+  }
+  if (q.has('pos')) {
+    const [x, y, f] = q.get('pos').split(',');
+    g.pos = { x: +x, y: +y };
+    if (f) g.facing = f;
+  }
+  if (q.has('time')) g.clock = Math.floor(g.clock / G.DAY_MINUTES) * G.DAY_MINUTES + Math.round(+q.get('time') * 60);
+  if (q.has('books')) {
+    g.books = QUEST_BOOKS.slice(0, Math.min(14, +q.get('books')));
+    for (const b of g.books) G.addItem(g, b, 1);
+  }
+  if (q.has('gold')) g.gold = +q.get('gold');
+  g.day = G.dayOf(g);
+  return g;
+}
+const camParam = new URLSearchParams(location.search).get('cam');
 
 // ═══ 存檔 ═══
 function autosave() { if (S.g) G.saveTo(S.slot || 1, S.g); }

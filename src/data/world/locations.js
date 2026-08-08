@@ -1,9 +1,9 @@
-// 江湖地圖：地點、秘笈藏處、頭目、招募條件、商店。
-// x/y 為地圖百分比座標（0-100）。
+// 江湖各地：秘笈藏處、頭目、招募條件、商店、客棧。
+// 這裡只有「玩起來是什麼」；「在地圖上的哪裡」全部在 jianghu.js。
 
 export const LOCATIONS = [
   {
-    id: 'yangzhou', name: '揚州城', x: 74, y: 47, type: 'town',
+    id: 'yangzhou', name: '揚州城', type: 'town',
     desc: '運河邊的繁華大城。酒樓、賭坊、妓院，還有醒來時身無分文的你。',
     links: ['xiangyang', 'taohua', 'fuwei'],
     inn: 20, shop: ['p_jinchuang', 'p_gudan', 'p_jiedu', 'p_xionghuang', 'w_tiejian', 'w_mudao', 'a_bu', 'a_pi', 'b_taizu', 'b_wuhu', 'b_quanzhen'],
@@ -15,7 +15,7 @@ export const LOCATIONS = [
     reward: '你在麗春院一間廂房的床底下，摸出一冊沾滿油污的破書。',
   },
   {
-    id: 'xiangyang', name: '襄陽城', x: 57, y: 52, type: 'town',
+    id: 'xiangyang', name: '襄陽城', type: 'town',
     desc: '漢水之濱的軍事重鎮。蒙古大軍壓境已三年，城頭旌旗未倒。',
     links: ['yangzhou', 'shaolin', 'wudang', 'dongting', 'huashan'],
     inn: 35, shop: ['p_xiaohuan', 'p_gudan', 'p_baxian', 'p_xingshen', 'w_gangdao', 'w_qingang', 'a_suozi', 'c_yupei', 'b_quanzhenjian', 'b_guixi', 'b_hunyuan'],
@@ -31,7 +31,7 @@ export const LOCATIONS = [
     reward: '法王敗走時，一卷夾在楞伽經中的手抄本自他懷中飄落。',
   },
   {
-    id: 'shaolin', name: '少林寺', x: 57, y: 39, type: 'sect',
+    id: 'shaolin', name: '少林寺', type: 'sect',
     desc: '嵩山之上，天下武學正宗。晨鐘暮鼓，七十二絕技藏於藏經閣。',
     links: ['xiangyang', 'huashan'],
     inn: 0, shop: ['p_xiaohuan', 'p_dahuan', 'p_ganlu', 'b_jingang', 'a_wugou'],
@@ -43,7 +43,7 @@ export const LOCATIONS = [
     reward: '藏經閣最高一層，一部梵文寫就的薄冊靜置案上。',
   },
   {
-    id: 'huashan', name: '華山', x: 46, y: 38, type: 'sect',
+    id: 'huashan', name: '華山', type: 'sect',
     desc: '西嶽奇險天下第一。思過崖上，石壁刻滿了前人破解各派武功的圖形。',
     links: ['shaolin', 'xiangyang', 'gumu', 'heimu', 'final'],
     book: 'b_dugu',
@@ -54,7 +54,7 @@ export const LOCATIONS = [
     reward: '思過崖石壁盡處，你看懂了那句「有進無退」。',
   },
   {
-    id: 'gumu', name: '終南山古墓', x: 44, y: 33, type: 'wild',
+    id: 'gumu', name: '終南山古墓', type: 'wild',
     desc: '重陽宮後山的活死人墓。墓中寒玉為床，機關重重。',
     links: ['huashan'],
     book: 'b_yunv',
@@ -68,7 +68,7 @@ export const LOCATIONS = [
     reward: '寒玉床畔的石匣中，是林朝英手書的心經。',
   },
   {
-    id: 'heimu', name: '黑木崖', x: 39, y: 27, type: 'sect',
+    id: 'heimu', name: '黑木崖', type: 'sect',
     desc: '日月神教總壇。萬丈懸崖之上，鐵索橫江，人聲鼎沸如潮：「文成武德，一統江湖。」',
     links: ['huashan', 'guangming'],
     book: 'b_kuihua',
@@ -79,7 +79,7 @@ export const LOCATIONS = [
     reward: '密室之中，一冊殘破的寶典擺在案頭，翻開便覺殺氣撲面。',
   },
   {
-    id: 'guangming', name: '光明頂', x: 20, y: 30, type: 'sect',
+    id: 'guangming', name: '光明頂', type: 'sect',
     desc: '西域崑崙。明教聖火千年不熄，密道深處藏著歷代教主的傳承。',
     links: ['heimu', 'wuliang'],
     shop: ['p_dahuan', 'p_baxian', 'p_ganlu', 'p_gangjing', 'a_jinsi', 'c_hanyu', 'b_chunyang'],
@@ -94,7 +94,7 @@ export const LOCATIONS = [
     reward: '密道盡頭的石壁後，是一張人皮所書的心法。',
   },
   {
-    id: 'wuliang', name: '無量山', x: 27, y: 71, type: 'wild',
+    id: 'wuliang', name: '無量山', type: 'wild',
     desc: '滇西群峰。山腹有洞，洞中有玉像，玉像之後有神仙姊姊的遺澤。',
     links: ['guangming', 'tianlong'],
     book: 'b_beiming',
@@ -105,7 +105,7 @@ export const LOCATIONS = [
     reward: '玉像座下的蒲團中，藏著一卷繪滿小人的圖譜。',
   },
   {
-    id: 'tianlong', name: '天龍寺', x: 30, y: 76, type: 'sect',
+    id: 'tianlong', name: '天龍寺', type: 'sect',
     desc: '大理崇聖寺。段氏皇族出家之所，鎮寺之寶為一門無形劍氣。',
     links: ['wuliang', 'jueqing'],
     shop: ['p_xiaohuan', 'p_gudan', 'p_jiedu', 'b_huichun', 'c_jiuhua'],
@@ -117,18 +117,18 @@ export const LOCATIONS = [
     reward: '牟尼堂中，六脈神劍的劍譜就攤在案上——原來從未有人偷得走。',
   },
   {
-    id: 'jueqing', name: '絕情谷', x: 50, y: 67, type: 'wild',
+    id: 'jueqing', name: '絕情谷', type: 'wild',
     desc: '谷中遍生情花，花色極美，刺上有毒。中者若動情念，便痛徹心扉。',
     links: ['tianlong', 'dongting'],
     book: 'b_anran',
-    boss: { title: '斷腸崖下的老怪', enemies: ['b_dingchunqiu', 'e_jiaozhong', 'e_jiaozhong'], flee: true },
+    boss: { title: '斷腸崖下的老怪', enemies: ['b_dingchunqiu', 'e_jiaozhong'], flee: true },
     mobs: ['e_jiaozhong', 'e_gaoshou'],
     recruit: [{ id: 'limochou', moralityMax: 45, books: 7 }],
     intro: '滿谷情花開得正盛。谷口石碑上刻著兩個字：絕情。',
     reward: '斷腸崖石壁上，十七招掌法刻痕猶新。',
   },
   {
-    id: 'dongting', name: '洞庭君山', x: 61, y: 62, type: 'sect',
+    id: 'dongting', name: '洞庭君山', type: 'sect',
     desc: '丐幫總舵所在。八百里洞庭，君山孤懸水中，污衣淨衣兩派聚此議事。',
     links: ['xiangyang', 'jueqing', 'wudang', 'fuwei'],
     inn: 15, shop: ['p_jinchuang', 'p_xiaohuan', 'p_xionghuang', 'b_mantian'],
@@ -140,7 +140,7 @@ export const LOCATIONS = [
     reward: '幫中長老取出一卷羊皮：「這掌法，該傳給配得上它的人。」',
   },
   {
-    id: 'wudang', name: '武當山', x: 52, y: 57, type: 'sect',
+    id: 'wudang', name: '武當山', type: 'sect',
     desc: '真武大帝道場。紫霄宮前，一位百歲老道正緩緩畫著圓。',
     links: ['xiangyang', 'dongting'],
     shop: ['p_xiaohuan', 'p_baxian', 'b_chunyang', 'a_xuanbing'],
@@ -152,7 +152,7 @@ export const LOCATIONS = [
     reward: '老道士以指蘸水，在青石上寫下拳經最後一句。',
   },
   {
-    id: 'taohua', name: '桃花島', x: 84, y: 55, type: 'wild',
+    id: 'taohua', name: '桃花島', type: 'wild',
     desc: '東海孤島。滿島桃花，卻布著五行八卦的奇門陣法，走錯一步便迷失終日。',
     links: ['yangzhou'],
     book: 'b_jiuyin',
@@ -163,7 +163,7 @@ export const LOCATIONS = [
     reward: '積翠亭中的石桌下，壓著半部真經的下卷。',
   },
   {
-    id: 'fuwei', name: '福威鏢局', x: 80, y: 71, type: 'wild',
+    id: 'fuwei', name: '福威鏢局', type: 'wild',
     desc: '福州城中的鏢局。門庭冷落，牆上刀痕未乾，血跡已黑。',
     links: ['yangzhou', 'dongting'],
     shop: ['p_jinchuang', 'p_jiedu', 'w_gangdao', 'a_pi'],
@@ -175,19 +175,14 @@ export const LOCATIONS = [
     reward: '老宅後院的枯井裡，你撈起一件破舊袈裟——上面密密麻麻寫滿了字。',
   },
   {
-    id: 'final', name: '華山之巔', x: 45, y: 32, type: 'final',
+    id: 'final', name: '華山之巔', type: 'final',
     desc: '五嶽獨尊之處。雲海翻騰，天下英雄的目光都聚在這裡。',
     links: ['huashan'],
     requireBooks: 14,
-    boss: { title: '華山論劍', enemies: ['b_dongfang', 'e_weishi', 'e_weishi'], scale: 1.22, flee: false },
+    boss: { title: '華山論劍', enemies: ['b_dongfang', 'e_weishi', 'e_weishi'], scale: 1.12, flee: false },
     intro: '一襲紅衣負手立於崖邊，手中只有一根繡花針。\n「十四部秘笈都到手了？那就讓我看看，你學會了什麼。」',
   },
 ];
 
 export const LOC_BY_ID = Object.fromEntries(LOCATIONS.map(l => [l.id, l]));
 
-export function travelCost(a, b) {
-  const A = LOC_BY_ID[a], B = LOC_BY_ID[b];
-  const d = Math.hypot(A.x - B.x, A.y - B.y);
-  return { days: Math.max(1, Math.round(d / 12)), stamina: Math.max(4, Math.round(d / 2.2)) };
-}

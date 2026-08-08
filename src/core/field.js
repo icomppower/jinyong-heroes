@@ -1,6 +1,6 @@
 // 走動層：碰撞、撞人觸發、尋路。純函式，Node 直接可用。
 
-import { getScene, isWalkable } from '../data/maps.js';
+import { getScene, isWalkable, actorAt } from '../data/maps.js';
 
 export const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
@@ -9,6 +9,15 @@ export function scene(id) { return getScene(id); }
 export function tileAt(sc, x, y) {
   if (x < 0 || y < 0 || x >= sc.w || y >= sc.h) return null;
   return sc.tiles[y * sc.w + x];
+}
+
+// 會走動的 NPC：位置是步數的純函式，不必存座標，也就永遠不會跟存檔對不上。
+export function actorEntities(sc, steps) {
+  if (!sc.actors?.length) return [];
+  return sc.actors.map(a => {
+    const p = actorAt(a, steps);
+    return { ...a, x: p.x, y: p.y };
+  });
 }
 
 // ents 可傳入「目前仍在場」的實體清單（例如頭目已被打倒就不再擋路）
@@ -46,7 +55,10 @@ export function pathTo(sc, from, goal, opts = {}) {
   const adjacentOk = opts.adjacent !== false;
   const ents = opts.ents || sc.entities;
   // 別把出入口當中繼站走過去，否則半路就被傳送到別的場景
-  const avoid = opts.avoid || new Set(['exit', 'gate', 'book']);
+  const avoid = opts.avoid || new Set(['exit', 'door', 'ferry', 'book']);
+  // 進不去的地方（例如秘笈未齊的華山之巔）也不能拿來抄近路，
+  // 否則尋路會排出一條走到一半就被擋下來的路。
+  const blocked = opts.blocked || null;
   const W = sc.w, H = sc.h;
   const prev = new Int32Array(W * H).fill(-1);
   const seen = new Uint8Array(W * H);
@@ -65,6 +77,7 @@ export function pathTo(sc, from, goal, opts = {}) {
       if (seen[ni]) continue;
       const t = tileAt(sc, nx, ny);
       if (t == null || !isWalkable(t)) continue;
+      if (blocked && blocked(nx, ny)) continue;
 
       const ent = entityAt(sc, nx, ny, ents);
       if (isGoal(nx, ny)) {
@@ -102,25 +115,31 @@ function rebuild(prev, start, end, W) {
 }
 
 // 走到某個 entity（實心的話走到相鄰並回傳最後撞上去的方向）
-export function pathToEntity(sc, from, pred, ents = sc.entities) {
+export function pathToEntity(sc, from, pred, ents = sc.entities, opts = {}) {
   const target = ents.find(pred);
   if (!target) return null;
   if (from.x === target.x && from.y === target.y) return [];
   return pathTo(sc, from,
-    (x, y, ent) => (ent ? ent === target : (x === target.x && y === target.y)), { ents });
+    (x, y, ent) => (ent ? ent === target : (x === target.x && y === target.y)), { ...opts, ents });
 }
 
 export function findEntity(sc, pred, ents = sc.entities) { return ents.find(pred) || null; }
 
-// 從 spawn 可達的格子數（場景健全性檢查用）
+// 從 spawn 可達的格子數（場景健全性檢查用）。渡口是圖上的一條額外邊，
+// 不當它是路的話，桃花島永遠會被誤判成到不了。
 export function reachableCount(sc, from, ents = sc.entities) {
   const W = sc.w, H = sc.h;
   const seen = new Uint8Array(W * H);
   const q = [from.y * W + from.x];
   seen[q[0]] = 1;
   let n = 0, head = 0;
+  const portal = new Map((sc.portals || []).map(p => [p.from.y * W + p.from.x, p.to.y * W + p.to.x]));
   while (head < q.length) {
     const cur = q[head++]; n++;
+    if (portal.has(cur)) {
+      const j = portal.get(cur);
+      if (!seen[j]) { seen[j] = 1; q.push(j); }
+    }
     const cx = cur % W, cy = (cur / W) | 0;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = cx + dx, ny = cy + dy;

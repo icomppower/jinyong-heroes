@@ -1,5 +1,8 @@
 // 介面煙霧測試：用真的按鍵、真的方向鍵、真的點地圖走一遍，把數值結果寫進 #testout。
 // 由 tools/uismoke.mjs 以無頭 Chrome 載入 index.html?autotest=1 執行。
+//
+// 第二幕（?stage=2）用除錯參數直接落在華山山道上——「得先走到第五關才測得到」
+// 壓成一次跳轉，這正是把 ?pos= / ?time= / ?books= 抄過來的理由。
 
 const out = [];
 const errors = [];
@@ -96,11 +99,32 @@ async function walkToEntity(pred, stats, maxLegs = 6) {
   return 'giveup';
 }
 
+// 走到世界上的某一格（尋路 + 真的按方向鍵）
+async function walkToTile(target, stats, maxLegs = 8) {
+  const F = await import('../src/core/field.js');
+  for (let leg = 0; leg < maxLegs; leg++) {
+    if (g().pos.x === target.x && g().pos.y === target.y) return 'arrived';
+    const sc = api.G.curScene(g());
+    const opts = api.G.pathOpts(g(), sc);
+    const path = F.pathTo(sc, g().pos, target, opts);
+    if (!path) return 'nopath';
+    for (const d of path) {
+      await stepDir(d, stats);
+      if (modalOpen()) return 'dialog';
+    }
+    return 'arrived';
+  }
+  return 'giveup';
+}
+
 export async function run(_api) {
   api = _api;
   window.onerror = (m, s, l) => errors.push(`${m} @${l}`);
   window.onunhandledrejection = e => errors.push('rejection: ' + (e.reason?.message || e.reason));
-  try { await scenario(); }
+  try {
+    if (new URLSearchParams(location.search).get('stage') === '2') await summitScenario();
+    else await scenario();
+  }
   catch (e) { errors.push('測試中止：' + (e?.message || e)); }
   t('執行期間沒有未捕捉的例外', errors.length === 0, errors.join(' | '));
 
@@ -129,7 +153,7 @@ async function scenario() {
 
   t('新遊戲建立成功', !!g() && g().party.length === 1, g() ? `隊伍 ${g().party.length} 人` : '無存檔物件');
   t('主角名字沿用輸入值', g().party[0].name === '測試', g().party[0].name);
-  t('開場在大地圖上（不是選單）', g().scene === 'overworld', g().scene);
+  t('開場就在世界上（不是選單，也沒有大地圖／城鎮之分）', g().scene === 'world', g().scene);
   const cv = $('#stage canvas');
   t('場景畫布有實際尺寸', cv && cv.width > 0 && cv.height > 0, cv ? `${cv.width}×${cv.height}` : '無畫布');
   t('場景畫面已建立', !!sui());
@@ -188,16 +212,29 @@ async function scenario() {
     } else t('點地圖會排出一條路徑', false, '附近找不到可走的目標格');
   }
 
-  // ── 走進揚州城 ──
-  const enter = await walkToEntity(e => e.type === 'gate' && e.to === 'yangzhou', stats);
-  await handleInterrupts(stats);
-  t('走到城門就進得了城', g().scene === 'yangzhou', `${enter} / 現在在 ${g().scene}`);
-
-  // ── 撞到掌櫃就開商鋪 ──
+  // ── 走進揚州城：同一張圖，沒有場景切換 ──
+  const enter = await walkToTile(api.G.locPos('yangzhou'), stats);
+  t('順著官道走進揚州城（一層世界，沒有場景切換）',
+    api.G.inDistrict(g()) === 'yangzhou' && g().scene === 'world',
+    `${enter} / 場景 ${g().scene}／所在 ${api.G.inDistrict(g())}`);
+  // 城裡是免費的——但走到城門那段官道當然要錢，所以只能量進城之後的增量
   {
-    const r = await walkToEntity(e => e.type === 'shop', stats);
+    const before = { sta: g().stamina, clock: g().clock };
+    for (const d of ['left', 'left', 'down', 'right', 'right', 'up']) await stepDir(d, stats);
+    t('城裡逛街不耗體力也不推時辰',
+      g().stamina === before.sta && g().clock === before.clock,
+      `體力 ${before.sta}→${g().stamina}、時辰 ${before.clock}→${g().clock}`);
+  }
+
+  // ── 推門進商鋪，裡頭才有掌櫃 ──
+  {
+    const staBefore = g().stamina, clockBefore = g().clock;
+    const r = await walkToEntity(e => e.type === 'door' && e.kind === 'shop' && e.loc === 'yangzhou', stats);
+    t('推開門會進到建物內部', g().scene.startsWith('int:'), `${r} / ${g().scene}`);
+    const doorTile = g().returnTo;
+    const r2 = await walkToEntity(e => e.type === 'shop', stats);
     const opened = modalOpen() && /商鋪/.test($('#modal.on h3')?.textContent || '');
-    t('走上去撞到掌櫃便開商鋪', opened, `${r}`);
+    t('屋裡撞到掌櫃便開商鋪', opened, `${r2}`);
     if (opened) {
       const goldBefore = g().gold;
       await click('#modal.on [data-buy="p_jinchuang"]');
@@ -205,11 +242,19 @@ async function scenario() {
       t('在商鋪買東西會扣銀兩', g().gold < goldBefore, `${goldBefore} → ${g().gold}`);
       while (modalOpen()) await dismissModal();
     }
+    const r3 = await walkToEntity(e => e.type === 'exit', stats);
+    await handleInterrupts(stats);
+    t('走出門會回到門那一格', g().scene === 'world'
+      && g().pos.x === doorTile.x && g().pos.y === doorTile.y,
+      `${r3} / (${g().pos.x},${g().pos.y}) 應為 (${doorTile.x},${doorTile.y})`);
+    t('進出建物不耗體力、不推時辰',
+      g().stamina === staBefore && g().clock === clockBefore,
+      `體力 ${staBefore}→${g().stamina}、時辰 ${clockBefore}→${g().clock}`);
   }
 
   // ── 撞到韋小寶就能入夥 ──
   {
-    const r = await walkToEntity(e => e.type === 'recruit' && e.who === 'weixiaobao', stats);
+    const r = await walkToEntity(e => e.type === 'recruit' && e.who === 'weixiaobao' && e.loc === 'yangzhou', stats);
     const opened = modalOpen();
     t('走上去撞到俠客便能交談', opened, `${r}`);
     if (opened) {
@@ -222,7 +267,7 @@ async function scenario() {
 
   // ── 撞到強敵就開打 ──
   {
-    const r = await walkToEntity(e => e.type === 'boss', stats);
+    const r = await walkToEntity(e => e.type === 'boss' && e.loc === 'yangzhou', stats);
     const opened = modalOpen();
     t('走到深處會遇上強敵', opened, `${r}`);
     if (opened) {
@@ -242,7 +287,7 @@ async function scenario() {
         if (b.over === 'win') {
           t('勝利後該地標記為已了結', !!g().flags['cleared:yangzhou']);
           // ── 打倒強敵之後，秘笈才拿得到 ──
-          const bk = await walkToEntity(e => e.type === 'book', stats);
+          const bk = await walkToEntity(e => e.type === 'book' && e.loc === 'yangzhou', stats);
           let guard2 = 0;
           while (modalOpen() && guard2++ < 4) await dismissModal();
           t('打倒強敵後走過去撿得到秘笈', g().books.includes('b_yeqiu'), `${bk} / 秘笈 ${g().books.length} 部`);
@@ -251,11 +296,21 @@ async function scenario() {
     }
   }
 
-  // ── 走出城 ──
+  // ── 時辰確實在走 ──
+  t('走動會推進時辰（HUD 上看得到）',
+    /\d\d:\d\d/.test($('#hud')?.textContent || ''), $('#hud')?.textContent.match(/\d\d:\d\d\s*\S+/)?.[0] || '');
+
+  // ── 露宿：在野外熬到天亮 ──
   {
-    const r = await walkToEntity(e => e.type === 'exit', stats);
-    await handleInterrupts(stats);
-    t('走到出口便離開場景回到大地圖', g().scene === 'overworld', `${r} / 現在在 ${g().scene}`);
+    api.S.g.clock = Math.floor(g().clock / 1440) * 1440 + 21 * 60;
+    api.S.g.day = api.G.dayOf(g());
+    const before = g().clock;
+    await tapChecked('[data-w="camp"]', '露宿');
+    await click('#modal.on .foot .btn.primary');
+    await sleep(80);
+    while (modalOpen()) await dismissModal();
+    t('露宿可以熬到天亮', !api.G.isNight(g()) && g().clock > before,
+      `${api.G.timeLabel(g())}`);
   }
 
   // ── 秘笈習武 ──
@@ -287,6 +342,43 @@ async function scenario() {
       && back.pos.x === g().pos.x && back.pos.y === g().pos.y,
     back ? `第 ${back.day} 天／${back.party.length} 人／(${back.pos.x},${back.pos.y})` : '讀檔失敗');
   t('存檔摘要可讀', !!api.G.saveInfo(9)?.name, api.G.saveInfo(9)?.name);
+}
+
+// ══ 第二幕：用除錯參數直接落在華山山道上，驗日夜、視野與華山之巔的門檻 ══
+async function summitScenario() {
+  const stats = { battles: 0 };
+  try { localStorage.clear(); } catch {}
+  await tapChecked('[data-new]', '標題的「新的江湖」');
+  await waitFor('#modal.on #nm');
+  await click('#modal.on .foot .btn.primary');
+  await click('#modal.on .foot .btn.primary');
+  await sleep(150);
+
+  t('?pos= 直接把人放到指定座標', g().pos.x === 164 && g().pos.y === 105,
+    `(${g().pos.x},${g().pos.y})`);
+  t('?time= 直接把時辰調到夜裡', api.G.isNight(g()), api.G.timeLabel(g()));
+  t('?books= 直接發下秘笈', g().books.length === 13, `${g().books.length} 部`);
+  t('?cam= 鎖住視野格寬', sui().viewTiles() === 24, `${sui().viewTiles()} 格`);
+
+  const rateNight = api.G.encounterRate(g(), api.G.curScene(g()), g().pos.x, g().pos.y);
+  const gDay = { ...g(), clock: Math.floor(g().clock / 1440) * 1440 + 12 * 60 };
+  const rateDay = api.G.encounterRate(gDay, api.G.curScene(g()), g().pos.x, g().pos.y);
+  t('夜路遭遇率確實比白天高', rateNight > rateDay,
+    `${(rateDay * 100).toFixed(1)}% → ${(rateNight * 100).toFixed(1)}%`);
+
+  // 十三部秘笈上不了華山之巔
+  const logBefore = g().log.length;
+  for (let i = 0; i < 4; i++) await stepDir('up', stats);
+  t('秘笈未齊就上不得華山之巔', api.G.inDistrict(g()) !== 'final'
+    && g().log.slice(logBefore).some(l => /秘笈未齊/.test(l)),
+    `所在 ${api.G.inDistrict(g()) || '山道上'}`);
+
+  // 補上第十四部，路就開了
+  const QB = (await import('../src/data/items.js')).QUEST_BOOKS;
+  for (const b of QB) if (!g().books.includes(b)) { g().books.push(b); break; }
+  for (let i = 0; i < 8; i++) await stepDir('up', stats);
+  t('十四部到齊就上得去了', api.G.inDistrict(g()) === 'final',
+    `${g().books.length} 部／所在 ${api.G.inDistrict(g()) || '山道上'}`);
 }
 
 const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
