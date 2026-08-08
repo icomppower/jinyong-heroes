@@ -1,11 +1,12 @@
 {
   "name": "jinyong-heroes",
   "version": "1.0.0",
-  "description": "金庸群俠傳 — 開放式武俠角色扮演，方格戰棋戰鬥",
+  "description": "金庸群俠傳 — 第一人稱、只靠走的 3D 開放世界武俠",
   "type": "module",
   "scripts": {
     "verify": "node tools/verify.mjs",
     "verify:quick": "node tools/verify.mjs --seeds=4",
+    "verify:3d": "node tools/verify3d.mjs",
     "serve": "python3 -m http.server 8123",
     "smoke": "node tools/uismoke.mjs"
   },

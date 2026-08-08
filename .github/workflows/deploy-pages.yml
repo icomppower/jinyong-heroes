@@ -24,6 +24,8 @@ jobs:
           node-version: '20'
       - name: 數值驗證（資料完整性、平衡、主線可通關）
         run: node tools/verify.mjs --seeds=8
+      - name: 三維世界驗證（高度場、官道坡度、可走遮罩、通過條件、視線）
+        run: node tools/verify3d.mjs
 
   deploy:
     needs: verify
