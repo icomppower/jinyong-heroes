@@ -11,6 +11,8 @@ import * as F from '../src/world3d/field.js';
 import { InstancePool } from '../src/world3d/kit.js';
 import { buildTerrain, buildWater, buildRoadSurfaces, buildStairs, buildScatter, WATER_Y } from '../src/world3d/scenery.js';
 import { buildSettlements } from '../src/world3d/settlements.js';
+import { buildHorses } from '../src/world3d/horse.js';
+import { buildMinimap } from '../src/world3d/minimap.js';
 import { LOC_BY_ID } from '../src/data/maps.js';
 
 const DEBUG = /(^|[?&#])debug/.test(location.search + location.hash);
@@ -26,7 +28,7 @@ export const CITY = {
   start: { x: F.SPAWN.x, z: F.SPAWN.z, heading: Math.PI * 0.82 },
 
   build(api) {
-    const { scene } = api;
+    const { scene, camera } = api;
 
     // ── 除錯參數。?pos= 用格座標（跟 2D 版同一個慣例），#at= 用公尺（跟 Golden Hour 同形）。
     //    把「得先走到第五關才測得到」壓成一次跳轉。 ──
@@ -51,6 +53,9 @@ export const CITY = {
     const groundH = F.makeGround(field, roads);
     const mask = F.buildWalkMask(field, roads, groundH);
     const speedAt = F.makeSpeed(field, mask);
+    const rideMask = F.buildRideMask(field, roads, groundH, mask);
+    const horseSpeedAt = F.makeHorseSpeed(field, rideMask);
+    const spots = F.horseSpots(rideMask);
     const tField = performance.now() - t0;
 
     const pool = new InstancePool(scene);
@@ -64,6 +69,8 @@ export const CITY = {
     const scatter = buildScatter(ctx);
     const towns = buildSettlements(ctx);
     const pooled = pool.build();
+    const herd = buildHorses({ scene, groundH, camera }, spots);
+    const minimap = buildMinimap(field, groundH, document.getElementById('mini'));
     const tGeo = performance.now() - t1;
 
     // 出生點站得住嗎？站不住就往外找一格——出生在牆裡是最蠢也最容易發生的一種上線事故。
@@ -118,6 +125,8 @@ export const CITY = {
       peakY: +groundH(field.peak.x, field.peak.z).toFixed(2),
       spawnY: +groundH(CITY.start.x, CITY.start.z).toFixed(2),
       walkableTiles: mask.reduce((n, v) => n + v, 0),
+      rideableTiles: rideMask.reduce((n, v) => n + v, 0),
+      horses: spots.length,
     };
     if (DEBUG) console.log('江湖 debug —', JSON.stringify(stats, null, 1));
 
@@ -125,7 +134,9 @@ export const CITY = {
     return {
       groundH,
       canStand: (x, z) => F.canStand(mask, x, z),
-      speedAt,
+      canRide: (x, z) => F.canStand(rideMask, x, z, 0.7),   // 馬比人寬，站位判得嚴一點
+      speedAt, horseSpeedAt,
+      herd, minimap,
       locationLabel,
       places, peakPlace,
       bounds: {
@@ -135,10 +146,11 @@ export const CITY = {
       size: F.WORLD_W,
       stats,
       // 測試與除錯要的原料
-      field, roads, mask, waterY: WATER_Y,
-      update(dt) {
+      field, roads, mask, rideMask, waterY: WATER_Y,
+      update(dt, st) {
         elapsed += dt;
         water.material.uniforms.time.value = elapsed;
+        herd.update(dt, st);
       },
     };
   },

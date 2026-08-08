@@ -499,3 +499,105 @@ export const PLACE_BY_ID = Object.fromEntries(PLACES.map(p => [p.id, p]));
 export const SPAWN = { gx: GEO.SPAWN.x, gy: GEO.SPAWN.y, x: tx2x(GEO.SPAWN.x), z: ty2z(GEO.SPAWN.y) };
 
 export { T, isWalkable, GEO, clamp, lerp, smoothstep };
+
+// ══════════════════════════════════════════════════════════
+// 6. 馬
+//    2 公尺一格本來就是「不必配馬」而挑的（取 10 公尺才非配不可）。既然要馬，
+//    那就讓馬付它自己的代價：馬只走得了平地與官道，**華山山道上不去**。
+//    於是「快」是官道的獎賞，而終局那段爬升仍然是兩條腿的事——
+//    第一人稱的視線與登頂的重量都保住了。
+// ══════════════════════════════════════════════════════════
+
+export const HORSE_ROAD_SPEED = 4.35;   // 公尺／秒，約走路的 2.8 倍
+export const MAX_RIDE_SLOPE = 0.42;     // 比人的 0.80 嚴得多：馬爬不了陡坡
+
+// 馬踏不上去的地形（走得上去不代表騎得上去）
+const NO_HOOF = new Set([T.SNOW]);
+
+export function buildRideMask(field, roads, groundH, walkMask) {
+  const sc = field.sc;
+  const N = W * H;
+  const mask = new Uint8Array(N);
+  const e = 1.6;
+  for (let gy = 1; gy < H - 1; gy++) for (let gx = 1; gx < W - 1; gx++) {
+    const i = gy * W + gx;
+    if (!walkMask[i]) continue;
+    if (NO_HOOF.has(sc.tiles[i])) continue;
+    const X = tx2x(gx), Z = ty2z(gy);
+    const s = Math.hypot(groundH(X + e, Z) - groundH(X - e, Z), groundH(X, Z + e) - groundH(X, Z - e)) / (2 * e);
+    if (s > MAX_RIDE_SLOPE) continue;
+    mask[i] = 1;
+  }
+  // 官道走廊一律蓋回可騎。走廊裡的地形已經被限坡混平了，那條路本來就是給車馬走的；
+  // 而用 1.6 公尺的取樣去量山腰路的坡度，量到的是**橫坡**（路肩往山上／往谷底），
+  // 不是路面本身的縱坡——照那個數判，十四處只剩兩處連得上。
+  for (const r of roads) {
+    if (r.kind === 'stair') continue;
+    const b = r.bounds, half = r.width / 2 + r.edge;
+    const gx0 = Math.max(1, Math.floor(x2tx(b.bx0))), gx1 = Math.min(W - 2, Math.ceil(x2tx(b.bx1)));
+    const gy0 = Math.max(1, Math.floor(z2ty(b.bz0))), gy1 = Math.min(H - 2, Math.ceil(z2ty(b.bz1)));
+    for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+      const i = gy * W + gx;
+      if (!walkMask[i] || NO_HOOF.has(sc.tiles[i])) continue;
+      const X = tx2x(gx), Z = ty2z(gy);
+      let best = 1e9;
+      for (let k = 0; k < r.pts.length - 1; k++) {
+        const a = r.pts[k], c = r.pts[k + 1];
+        const dx = c.x - a.x, dz = c.z - a.z, L2 = dx * dx + dz * dz || 1;
+        let t = ((X - a.x) * dx + (Z - a.z) * dz) / L2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const d = Math.hypot(X - (a.x + dx * t), Z - (a.z + dz * t));
+        if (d < best) best = d;
+      }
+      if (best <= half) mask[i] = 1;
+    }
+  }
+  // 山道整條挖掉：石階是給人爬的，不是給馬走的。**這一步一定要在蓋官道之後**，
+  // 否則華山山門那條官道會把石階的頭幾格又蓋回可騎，馬就騎上華山了。
+  for (const r of roads) {
+    if (r.kind !== 'stair') continue;
+    const b = r.bounds;
+    const gx0 = Math.max(1, Math.floor(x2tx(b.bx0))), gx1 = Math.min(W - 2, Math.ceil(x2tx(b.bx1)));
+    const gy0 = Math.max(1, Math.floor(z2ty(b.bz0))), gy1 = Math.min(H - 2, Math.ceil(z2ty(b.bz1)));
+    for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) mask[gy * W + gx] = 0;
+  }
+  return mask;
+}
+
+export function makeHorseSpeed(field, rideMask) {
+  const sc = field.sc;
+  return function horseSpeedAt(X, Z, groundH) {
+    const gx = clamp(Math.round(x2tx(X)), 0, W - 1), gy = clamp(Math.round(z2ty(Z)), 0, H - 1);
+    const t = sc.tiles[gy * W + gx];
+    const cost = TILE_COST[t] || { m: 30 };
+    const m = cost.m > 0 ? cost.m : ROAD_M * 0.9;
+    // 馬對地面比人挑：官道全速，跨野掉得比人還兇（0.9 次方，人是 0.6）
+    let v = HORSE_ROAD_SPEED * Math.pow(ROAD_M / m, 0.9);
+    if (groundH) {
+      const e = 1.2;
+      const gxs = (groundH(X + e, Z) - groundH(X - e, Z)) / (2 * e);
+      const gzs = (groundH(X, Z + e) - groundH(X, Z - e)) / (2 * e);
+      v /= (1 + Math.hypot(gxs, gzs) * 3.1);
+    }
+    return v;
+  };
+}
+
+// 拴馬樁：每一處聚落一匹。擺在廣場正中往南幾格，一定要騎得上去的格子。
+export function horseSpots(rideMask) {
+  const out = [];
+  for (const p of PLACES) {
+    if (p.id === 'final') continue;                 // 山頂沒有馬，馬上不來
+    let best = null;
+    for (let r = 2; r <= 10 && !best; r++) {
+      for (let dy = -r; dy <= r && !best; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const gx = p.gx + dx, gy = p.gy + dy;
+        if (gx < 1 || gy < 1 || gx >= W - 1 || gy >= H - 1) continue;
+        if (!rideMask[gy * W + gx]) continue;
+        best = { gx, gy }; break;
+      }
+    }
+    if (best) out.push({ id: p.id, gx: best.gx, gy: best.gy, x: tx2x(best.gx), z: ty2z(best.gy) });
+  }
+  return out;
+}

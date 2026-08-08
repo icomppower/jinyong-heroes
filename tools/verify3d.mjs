@@ -150,6 +150,56 @@ section('【四】通過條件：揚州出生，走到華山之巔');
 }
 
 // ─────────────────────────────────────────────
+section('【四之二】馬：官道的獎賞，但上不了華山');
+{
+  const rideMask = F.buildRideMask(field, roads, groundH, mask);
+  const horseSpeedAt = F.makeHorseSpeed(field, rideMask);
+  const spots = F.horseSpots(rideMask);
+  check('十四處聚落各拴一匹馬（桃花島隔海，沒有）', spots.length === 14, spots.length + ' 匹');
+  for (const sp of spots) {
+    check(`${nameOf(sp.id)} 的馬站得住（騎得上去的格子）`,
+      F.canStand(rideMask, sp.x, sp.z, 0.7));
+  }
+
+  const yz = spots.find(s => s.id === 'yangzhou');
+  let linked = 0; const cut = [];
+  for (const sp of spots) {
+    const okR = F.reachable(rideMask, { x: yz.gx, y: yz.gy }, { x: sp.gx, y: sp.gy }).ok;
+    if (sp.id === 'taohua') {
+      // 桃花島那匹是島上自己的馬——渡海過去才騎得到，本土騎不過去才是對的
+      check('桃花島的馬騎不過海（島上自己有一匹）', !okR);
+      continue;
+    }
+    if (okR) linked++; else cut.push(sp.id);
+  }
+  check('本土十三處拴馬樁之間騎得通', linked === spots.length - 1,
+    `${linked}/${spots.length - 1}` + (cut.length ? '　斷：' + cut.join(',') : ''));
+
+  const P = F.PLACE_BY_ID;
+  check('騎得到華山山門', F.reachable(rideMask, { x: yz.gx, y: yz.gy }, { x: P.huashan.gx, y: P.huashan.gy }).ok);
+  // 這一條是整個設計的支點：馬不准騎上論劍台。
+  check('**騎不上華山之巔**（石階整條不給騎，最後一段只能靠腿）',
+    !F.reachable(rideMask, { x: yz.gx, y: yz.gy }, { x: P.final.gx, y: P.final.gy }).ok);
+
+  const rd = { x: F.tx2x(276), z: F.ty2z(146) };
+  const hv = horseSpeedAt(rd.x, rd.z, groundH), wv = speedAt(rd.x, rd.z, groundH);
+  check('官道上馬比人快一倍以上', hv > wv * 2, `${hv.toFixed(2)} vs ${wv.toFixed(2)} m/s`);
+  const gx = F.tx2x(280), gz = F.ty2z(160);
+  const hg = horseSpeedAt(gx, gz, groundH), wg = speedAt(gx, gz, groundH);
+  check('跨野時馬的優勢縮小（馬比人挑地面）', hg / wg < hv / wv,
+    `野外 ${(hg / wg).toFixed(2)} 倍 vs 官道 ${(hv / wv).toFixed(2)} 倍`);
+
+  const ride = F.routeFast(rideMask, horseSpeedAt, groundH, { x: yz.gx, y: yz.gy }, { x: P.huashan.gx, y: P.huashan.gy });
+  check('騎馬從揚州到華山山門在四分鐘內', ride && ride.seconds < 240,
+    ride ? `${(ride.length * F.S).toFixed(0)} 公尺，${(ride.seconds / 60).toFixed(1)} 分` : '無路');
+
+  let rideable = 0, walkable = 0;
+  for (let i = 0; i < mask.length; i++) { walkable += mask[i]; rideable += rideMask[i]; }
+  check('騎得到的地方比走得到的少（馬有它自己的代價）', rideable < walkable,
+    `${(100 * rideable / walkable).toFixed(0)}% 的可走地`);
+}
+
+// ─────────────────────────────────────────────
 section('【五】視線：看得見才走得到');
 {
   const eye = { x: F.SPAWN.x, z: F.SPAWN.z };

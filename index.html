@@ -18,6 +18,12 @@
   #place{bottom:26px;left:24px;font-size:27px;font-weight:400;letter-spacing:5px;}
   #meta{bottom:26px;right:24px;text-align:right;font-size:12px;opacity:.62;
     letter-spacing:2px;line-height:1.95;font-family:-apple-system,Arial,sans-serif;}
+  #mini{position:fixed;right:22px;top:20px;z-index:11;width:170px;height:170px;
+    border-radius:50%;pointer-events:none;
+    filter:drop-shadow(0 6px 22px rgba(0,0,0,.5));}
+  #mount{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);z-index:11;
+    color:#f2e6c8;font-size:13px;letter-spacing:3px;opacity:.82;pointer-events:none;
+    text-shadow:0 2px 10px rgba(0,0,0,.7);}
   #compass{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10;
     color:#eae2d2;font-size:15px;letter-spacing:8px;opacity:.68;pointer-events:none;
     text-shadow:0 2px 10px rgba(0,0,0,.7);}
@@ -50,6 +56,8 @@
   body.touch #meta{font-size:10px;bottom:calc(18px + env(safe-area-inset-bottom));right:16px;}
   body.touch #title h1{font-size:15px;letter-spacing:5px;}
   body.touch #title{top:12px;left:16px;}
+  body.touch #mini{width:112px;height:112px;top:14px;right:14px;}
+  body.touch #mount{bottom:calc(74px + env(safe-area-inset-bottom));font-size:11px;}
   @media (max-width:620px){
     #overlay h1{font-size:29px;letter-spacing:11px;}
     #overlay h2{font-size:10px;letter-spacing:4px;}
@@ -66,12 +74,15 @@
 <body>
 <div id="vignette"></div>
 <div id="crosshair"></div>
+<canvas id="mini" width="340" height="340"></canvas>
+<div id="mount"></div>
 <div id="compass">北</div>
 <div class="hud" id="title"><h1>金庸群俠傳</h1><p>第一人稱．只靠走的江湖</p></div>
 <div class="hud" id="hint">
   W A S D／方向鍵 — 走&nbsp;&nbsp;·&nbsp;&nbsp;滑鼠 — 看向<br>
-  ← → 或 Q E — 轉身&nbsp;&nbsp;·&nbsp;&nbsp;N — 推三個時辰&nbsp;&nbsp;·&nbsp;&nbsp;H — 收起提示<br>
-  沒有地圖，也沒有快速旅行。看山認路。
+  ← → 或 Q E — 轉身&nbsp;&nbsp;·&nbsp;&nbsp;F — 上馬／下馬<br>
+  M — 小地圖指北／朝向在上&nbsp;&nbsp;·&nbsp;&nbsp;[ ] — 縮放&nbsp;&nbsp;·&nbsp;&nbsp;N — 推時辰&nbsp;&nbsp;·&nbsp;&nbsp;H — 收提示<br>
+  馬只走官道與平地。華山的石階，得自己爬上去。
 </div>
 <div class="hud" id="place"></div>
 <div class="hud" id="meta">
@@ -85,7 +96,8 @@
     你在揚州城外的官道上醒來。<br>
     十五處城鎮山門散在一張七百六十八公尺見方的圖上，<br>
     最西是光明頂，最東是桃花島，而全圖最高的那一點是華山之巔。<br>
-    不騎馬，不衝刺，沒有地圖——認得出山，才走得到。
+    十四處聚落各拴著一匹馬，官道上放得開；<br>
+    但華山的石階馬上不去——最後那段爬升，只能靠自己的兩條腿。
   </div>
   <button id="startBtn">入江湖</button>
 </div>

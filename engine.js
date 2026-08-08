@@ -507,6 +507,7 @@ export function runWalk(CITY) {
   document.body.appendChild(renderer.domElement);
 
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.12, 2600);
+  scene.add(camera);            // 上馬後那截馬頸掛在相機底下，相機得在場景圖裡才畫得到
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.75, 0.90);
@@ -570,6 +571,10 @@ export function runWalk(CITY) {
   const groundH = world.groundH || (() => 0);
   const canStand = world.canStand || (() => true);
   const speedAt = world.speedAt || (() => 1.5);
+  const horseSpeedAt = world.horseSpeedAt || speedAt;
+  const canRide = world.canRide || (() => false);
+  const herd = world.herd || null;
+  const minimap = world.minimap || null;
   const places = world.places || [];
   const B = world.bounds || { x0: -400, x1: 400, z0: -300, z1: 300 };
 
@@ -578,6 +583,7 @@ export function runWalk(CITY) {
   const st = {
     x: START.x, z: START.z, heading: START.heading || 0, pitch: 0,
     y: 0, bob: 0, speed: 0, clock: CITY.timeOfDay ?? 8.5, moving: 0,
+    mounted: null, horseGait: 0,
   };
   st.y = groundH(st.x, st.z);
 
@@ -587,6 +593,10 @@ export function runWalk(CITY) {
   addEventListener('keydown', e => {
     const k = e.key.toLowerCase(); keys[k] = true;
     if (k === 'n') { st.clock = (st.clock + 3) % 24; toast(clockLabel()); }
+    if (k === 'f') toggleMount();
+    if (k === 'm' && minimap) toast(minimap.toggleOrientation() ? '小地圖：朝向在上' : '小地圖：指北');
+    if (k === '[' && minimap) minimap.zoom(1.35);
+    if (k === ']' && minimap) minimap.zoom(1 / 1.35);
     if (k === 'h') { const el = $('#hint'); if (el) el.style.opacity = el.style.opacity === '0' ? '0.55' : '0'; }
     if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   });
@@ -633,7 +643,8 @@ export function runWalk(CITY) {
 
   // ---------- HUD ----------
   const placeEl = $('#place'), compassEl = $('#compass'), altEl = $('#alt'),
-        clockEl = $('#clock'), toastEl = $('#toast'), speedEl = $('#pace');
+        clockEl = $('#clock'), toastEl = $('#toast'), speedEl = $('#pace'),
+        mountEl = $('#mount');
   let toastT = 0;
   function toast(text) {
     if (!toastEl) return;
@@ -663,7 +674,12 @@ export function runWalk(CITY) {
     if (compassEl) compassEl.textContent = compassLabel();
     if (altEl) altEl.textContent = `海拔 ${Math.round(st.y)} 公尺`;
     if (clockEl) clockEl.textContent = clockLabel();
-    if (speedEl) speedEl.textContent = `${st.speed.toFixed(1)} m/s`;
+    if (speedEl) speedEl.textContent = (st.mounted ? '🐴 ' : '') + `${st.speed.toFixed(1)} m/s`;
+    if (mountEl) {
+      const near = herd && !st.mounted ? herd.nearest(st.x, st.z) : null;
+      mountEl.textContent = st.mounted ? 'F · 下馬'
+        : (near && near.horse && near.dist <= MOUNT_RANGE ? `F · 上馬（${near.horse.name}）` : '');
+    }
   }
 
   // ---------- 光隨時辰 ----------
@@ -687,15 +703,42 @@ export function runWalk(CITY) {
     bloom.strength = 0.26 + skyU.night.value * 0.30;
   }
 
+  // ---------- 上馬／下馬 ----------
+  //  馬只走得了平地與官道，華山石階整條不給騎——到了山門就得下馬。
+  //  「快」是官道的獎賞，登頂仍然是兩條腿的事。
+  const MOUNT_RANGE = 4.2;
+  function toggleMount() {
+    if (!herd) return;
+    if (st.mounted) {
+      herd.dismount(st.mounted, st.x, st.z, st.heading);
+      st.mounted = null; st.horseGait = 0;
+      toast('下馬');
+      return;
+    }
+    const { horse, dist } = herd.nearest(st.x, st.z);
+    if (!horse || dist > MOUNT_RANGE) { toast('附近沒有馬'); return; }
+    if (!canRide(st.x, st.z)) { toast('這裡上不了馬'); return; }
+    st.mounted = herd.mount(horse);
+    toast('上馬 · ' + horse.name);
+  }
+  function autoDismount() {
+    // 騎到馬過不去的地方（山道口、雪線、陡坡）就自己下來，不要把人卡在那裡
+    herd.dismount(st.mounted, st.x, st.z, st.heading);
+    st.mounted = null; st.horseGait = 0;
+    toast('馬上不去了 · 下馬');
+  }
+
   // ---------- 走 ----------
   function tryMove(nx, nz) {
-    if (canStand(nx, nz)) return { x: nx, z: nz };
-    if (canStand(nx, st.z)) return { x: nx, z: st.z };      // 沿牆滑
-    if (canStand(st.x, nz)) return { x: st.x, z: nz };
+    const ok = st.mounted ? canRide : canStand;
+    if (ok(nx, nz)) return { x: nx, z: nz };
+    if (ok(nx, st.z)) return { x: nx, z: st.z };            // 沿牆滑
+    if (ok(st.x, nz)) return { x: st.x, z: nz };
     return { x: st.x, z: st.z };
   }
 
   let auto = null;                       // 自走測試用
+  let blockedFor = 0;
   function step(dt) {
     let fwd = 0, side = 0, turn = 0;
     if (keys['w'] || keys['arrowup']) fwd += 1;
@@ -728,7 +771,7 @@ export function runWalk(CITY) {
     const mag = Math.hypot(fwd, side);
     if (mag > 1) { fwd /= mag; side /= mag; }
 
-    const base = speedAt(st.x, st.z, groundH);
+    const base = st.mounted ? horseSpeedAt(st.x, st.z, groundH) : speedAt(st.x, st.z, groundH);
     const v = base * Math.min(1, mag);
     st.speed = v;
     if (v > 0.01) {
@@ -739,8 +782,12 @@ export function runWalk(CITY) {
       const p = tryMove(clamp(nx, B.x0, B.x1), clamp(nz, B.z0, B.z1));
       const moved = Math.hypot(p.x - st.x, p.z - st.z);
       st.x = p.x; st.z = p.z;
-      st.bob += moved * 2.1;
+      st.bob += moved * (st.mounted ? 0.9 : 2.1);
       st.moving = moved > 1e-4 ? 1 : 0;
+      if (st.mounted && moved < 1e-5 && mag > 0.5) {
+        blockedFor += dt;
+        if (blockedFor > 0.55) { autoDismount(); blockedFor = 0; }
+      } else blockedFor = 0;
       if (auto) { auto.travelled += moved; if (moved < 1e-5) auto.stuck += dt; }
     } else st.moving = 0;
 
@@ -750,9 +797,10 @@ export function runWalk(CITY) {
   }
 
   function updateCamera() {
-    const bobY = Math.sin(st.bob) * 0.055 * st.moving;
+    const bobY = Math.sin(st.bob) * (st.mounted ? 0.035 : 0.055) * st.moving;
     const bobR = Math.cos(st.bob * 0.5) * 0.012 * st.moving;
-    camera.position.set(st.x, st.y + EYE + bobY, st.z);
+    const eye = st.mounted ? EYE + 1.05 : EYE;      // 馬背上看得遠一點
+    camera.position.set(st.x, st.y + eye + bobY, st.z);
     camera.rotation.set(0, 0, 0);
     camera.rotateY(st.heading + Math.PI);       // heading = π 面北 ⇒ 相機朝 +z 為 heading 0
     camera.rotateX(st.pitch);
@@ -814,6 +862,11 @@ export function runWalk(CITY) {
       return a[Math.floor(a.length * 0.95)];
     },
     world,
+    get mounted() { return st.mounted ? st.mounted.name : null; },
+    mountToggle: () => toggleMount(),
+    minimapSample: () => (minimap ? minimap.sample() : null),
+    minimapState: () => (minimap ? { ...minimap.state } : null),
+    minimapToggle: () => (minimap ? minimap.toggleOrientation() : null),
   };
 
   // ---------- 迴圈 ----------
@@ -830,6 +883,7 @@ export function runWalk(CITY) {
     G.t += dt; G.frames++;
     if (G.frames > 12) { G.frameMs.push(raw); if (G.frameMs.length > 400) G.frameMs.shift(); }
     if (G.frames % 6 === 0) updateHud();
+    if (minimap && G.frames % 2 === 0) minimap.draw(st);
   }
   requestAnimationFrame(frame);
   G.ready = true;

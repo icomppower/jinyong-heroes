@@ -94,6 +94,42 @@ async function framesAtLeast(G, n, timeoutMs = 60000) {
     }
 
 
+    // ── 馬 ──
+    ok('十四匹馬擺出來了', st.horses === 14, st.horses + ' 匹');
+    ok('騎得到的地方比走得到的少', st.rideableTiles < st.walkableTiles,
+      `${st.rideableTiles} / ${st.walkableTiles}`);
+    {
+      // 走到揚州的拴馬樁旁邊，上馬、跑一段、再下馬
+      const spot = F.horseSpots(world.rideMask).find(s => s.id === 'yangzhou');
+      G.teleport(spot.x, spot.z + 2.4, Math.PI);
+      G.mountToggle();
+      ok('走近拴馬樁按得上馬', !!G.mounted, G.mounted || '沒上去');
+      if (G.mounted) {
+        const x0 = G.x, z0 = G.z;
+        G.autowalk([{ x: F.tx2x(276), z: F.ty2z(146) }], 4);
+        G.simulate(90, 1 / 15);
+        const rode = Math.hypot(G.x - x0, G.z - z0);
+        ok('馬真的跑得動', rode > 20, rode.toFixed(0) + ' 公尺');
+        G.mountToggle();
+        ok('下得了馬', !G.mounted);
+      }
+    }
+
+    // ── 小地圖：指北 ──
+    if (G.minimapState()) {
+      const s0 = G.minimapState();
+      ok('小地圖預設指北（不是朝向在上）', s0.headingUp === false);
+      const flipped = G.minimapToggle();
+      ok('M 切得動朝向在上', flipped === true);
+      G.minimapToggle();
+      ok('再按一次切回指北', G.minimapState().headingUp === false);
+      const smp = G.minimapSample();
+      R.minimap = smp;
+      ok('小地圖畫得出東西（不是一片空白）', smp.pixels > 2000, smp.pixels + ' px');
+      ok('小地圖有地形分色（不是一片死色）', smp.colours >= 12, smp.colours + ' 色');
+      ok('小地圖不是全黑也不是全白', smp.mean > 25 && smp.mean < 225, smp.mean.toFixed(0));
+    }
+
     R.pass = R.checks.filter(c => c.pass).length; R.fail = R.checks.length - R.pass; out(R);
 
     // ── 幀時：先讓它跑一陣子再取 p95 ──
