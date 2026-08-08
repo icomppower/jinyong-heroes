@@ -645,6 +645,8 @@ export function runWalk(CITY) {
   const placeEl = $('#place'), compassEl = $('#compass'), altEl = $('#alt'),
         clockEl = $('#clock'), toastEl = $('#toast'), speedEl = $('#pace'),
         mountEl = $('#mount');
+  // 手機上沒有 F 鍵，喚馬的提示本身就是那顆鍵
+  if (mountEl) mountEl.addEventListener('touchstart', e => { e.preventDefault(); toggleMount(); }, { passive: false });
   let toastT = 0;
   function toast(text) {
     if (!toastEl) return;
@@ -678,7 +680,9 @@ export function runWalk(CITY) {
     if (mountEl) {
       const near = herd && !st.mounted ? herd.nearest(st.x, st.z) : null;
       mountEl.textContent = st.mounted ? 'F · 下馬'
-        : (near && near.horse && near.dist <= MOUNT_RANGE ? `F · 上馬（${near.horse.name}）` : '');
+        : !near ? ''
+        : !canRide(st.x, st.z) ? 'F · 此處騎不了馬'
+        : near.horse ? `F · 喚馬（${near.horse.name}）` : '';
     }
   }
 
@@ -703,10 +707,10 @@ export function runWalk(CITY) {
     bloom.strength = 0.26 + skyU.night.value * 0.30;
   }
 
-  // ---------- 上馬／下馬 ----------
-  //  馬只走得了平地與官道，華山石階整條不給騎——到了山門就得下馬。
+  // ---------- 喚馬／下馬 ----------
+  //  呼哨一聲馬就到：不必走回拴馬樁，隨處按 F 立刻上馬。
+  //  唯一的限制還在——馬只走得了平地與官道，華山石階整條不給騎。
   //  「快」是官道的獎賞，登頂仍然是兩條腿的事。
-  const MOUNT_RANGE = 4.2;
   function toggleMount() {
     if (!herd) return;
     if (st.mounted) {
@@ -715,11 +719,11 @@ export function runWalk(CITY) {
       toast('下馬');
       return;
     }
-    const { horse, dist } = herd.nearest(st.x, st.z);
-    if (!horse || dist > MOUNT_RANGE) { toast('附近沒有馬'); return; }
     if (!canRide(st.x, st.z)) { toast('這裡上不了馬'); return; }
+    const { horse } = herd.nearest(st.x, st.z);
+    if (!horse) { toast('沒有馬可喚'); return; }
     st.mounted = herd.mount(horse);
-    toast('上馬 · ' + horse.name);
+    toast('呼哨喚馬 · ' + horse.name);
   }
   function autoDismount() {
     // 騎到馬過不去的地方（山道口、雪線、陡坡）就自己下來，不要把人卡在那裡
@@ -864,6 +868,8 @@ export function runWalk(CITY) {
     world,
     get mounted() { return st.mounted ? st.mounted.name : null; },
     mountToggle: () => toggleMount(),
+    // 喚馬是無視距離的，所以測試要能量到「喚的時候最近的馬有多遠」
+    nearestHorseDist: () => (herd ? herd.nearest(st.x, st.z).dist : null),
     minimapSample: () => (minimap ? minimap.sample() : null),
     minimapState: () => (minimap ? { ...minimap.state } : null),
     minimapToggle: () => (minimap ? minimap.toggleOrientation() : null),

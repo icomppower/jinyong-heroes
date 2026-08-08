@@ -57,7 +57,10 @@
   body.touch #title h1{font-size:15px;letter-spacing:5px;}
   body.touch #title{top:12px;left:16px;}
   body.touch #mini{width:112px;height:112px;top:14px;right:14px;}
-  body.touch #mount{bottom:calc(74px + env(safe-area-inset-bottom));font-size:11px;}
+  body.touch #mount{bottom:calc(74px + env(safe-area-inset-bottom));font-size:11px;
+    pointer-events:auto;padding:9px 18px;border:1px solid rgba(242,230,200,.32);
+    border-radius:20px;background:rgba(20,16,12,.42);-webkit-tap-highlight-color:transparent;}
+  body.touch #mount:empty{display:none;}
   @media (max-width:620px){
     #overlay h1{font-size:29px;letter-spacing:11px;}
     #overlay h2{font-size:10px;letter-spacing:4px;}
@@ -80,7 +83,7 @@
 <div class="hud" id="title"><h1>金庸群俠傳</h1><p>第一人稱．只靠走的江湖</p></div>
 <div class="hud" id="hint">
   W A S D／方向鍵 — 走&nbsp;&nbsp;·&nbsp;&nbsp;滑鼠 — 看向<br>
-  ← → 或 Q E — 轉身&nbsp;&nbsp;·&nbsp;&nbsp;F — 上馬／下馬<br>
+  ← → 或 Q E — 轉身&nbsp;&nbsp;·&nbsp;&nbsp;F — 喚馬／下馬（隨處呼哨，馬立到）<br>
   M — 小地圖指北／朝向在上&nbsp;&nbsp;·&nbsp;&nbsp;[ ] — 縮放&nbsp;&nbsp;·&nbsp;&nbsp;N — 推時辰&nbsp;&nbsp;·&nbsp;&nbsp;H — 收提示<br>
   馬只走官道與平地。華山的石階，得自己爬上去。
 </div>
@@ -96,16 +99,16 @@
     你在揚州城外的官道上醒來。<br>
     十五處城鎮山門散在一張七百六十八公尺見方的圖上，<br>
     最西是光明頂，最東是桃花島，而全圖最高的那一點是華山之巔。<br>
-    十四處聚落各拴著一匹馬，官道上放得開；<br>
+    隨處呼哨喚馬，官道上放得開；<br>
     但華山的石階馬上不去——最後那段爬升，只能靠自己的兩條腿。
   </div>
   <button id="startBtn">入江湖</button>
 </div>
 <script type="module">
-import { runWalk } from './engine.js?v=3d1';
-import { CITY } from './cities/jianghu.js?v=3d1';
+import { runWalk } from './engine.js?v=3d2';
+import { CITY } from './cities/jianghu.js?v=3d2';
 runWalk(CITY);
-if (new URLSearchParams(location.search).has('autotest')) import('./tools/uitest.js?v=3d1');
+if (new URLSearchParams(location.search).has('autotest')) import('./tools/uitest.js?v=3d2');
 </script>
 </body>
 </html>

@@ -99,20 +99,40 @@ async function framesAtLeast(G, n, timeoutMs = 60000) {
     ok('騎得到的地方比走得到的少', st.rideableTiles < st.walkableTiles,
       `${st.rideableTiles} / ${st.walkableTiles}`);
     {
-      // 走到揚州的拴馬樁旁邊，上馬、跑一段、再下馬
+      // 站在揚州拴馬樁旁邊，上馬、跑一段、再下馬
       const spot = F.horseSpots(world.rideMask).find(s => s.id === 'yangzhou');
       G.teleport(spot.x, spot.z + 2.4, Math.PI);
       G.mountToggle();
-      ok('走近拴馬樁按得上馬', !!G.mounted, G.mounted || '沒上去');
+      ok('按得上馬', !!G.mounted, G.mounted || '沒上去');
+      let far = null;
       if (G.mounted) {
         const x0 = G.x, z0 = G.z;
         G.autowalk([{ x: F.tx2x(276), z: F.ty2z(146) }], 4);
         G.simulate(90, 1 / 15);
         const rode = Math.hypot(G.x - x0, G.z - z0);
         ok('馬真的跑得動', rode > 20, rode.toFixed(0) + ' 公尺');
+        far = { x: G.x, z: G.z };            // 這裡騎得到，等一下拿來測喚馬
         G.mountToggle();
         ok('下得了馬', !G.mounted);
       }
+      // 呼哨喚馬：離最近的馬再遠，只要腳下騎得了，按 F 馬就到。
+      // 先把剛下的那匹騎回拴馬樁附近放掉，才量得到真正的距離。
+      if (far) {
+        G.mountToggle();
+        if (G.mounted) { G.teleport(spot.x, spot.z + 2.4, Math.PI); G.mountToggle(); }
+        G.teleport(far.x, far.z, Math.PI);
+        const d = G.nearestHorseDist();
+        G.mountToggle();
+        ok('離最近的馬很遠也喚得到（呼哨即到）', !!G.mounted && d > 20,
+          `${d === null ? '?' : d.toFixed(0)} 公尺外 · ${G.mounted || '沒上去'}`);
+        if (G.mounted) { G.teleport(spot.x, spot.z + 2.4, Math.PI); G.mountToggle(); }
+      }
+      // 但論劍台上仍舊喚不出馬——設計的支點沒被喚馬繞過
+      const pk = F.GEO.PEAKS.find(p => p.name === '華山之巔');
+      G.teleport(F.tx2x(pk.x), F.ty2z(pk.y), Math.PI);
+      G.mountToggle();
+      ok('華山之巔喚不出馬（走得上去、騎不上去）', !G.mounted, G.mounted || '（沒上馬）');
+      if (G.mounted) G.mountToggle();
     }
 
     // ── 小地圖：指北 ──
